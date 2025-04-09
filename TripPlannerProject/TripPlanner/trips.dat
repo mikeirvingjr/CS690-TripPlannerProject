@@ -1,0 +1,1 @@
+{"Budget":5000.0,"Trips":[{"Id":0,"Name":"Japan","Destination":"Osaka, Japan","StartDate":"2025-08-16T00:00:00","EndDate":"2025-08-30T00:00:00","Items":[{"Id":0,"TripId":0,"ItemType":1,"Name":"Flight to Osaka","Destination":"SDF Airport","StartDate":"2025-08-16T00:00:00","Duration":16.5,"DurationType":1,"Cost":650.0}]}]}
