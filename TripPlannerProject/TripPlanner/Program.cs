@@ -5,78 +5,24 @@ namespace TripPlanner;
 
 class Program
 {
-    static readonly Budget _budget = new();
-    
-    static readonly List<Trip> _trips = [];
-        
-    static readonly List<TripItem> _items = [];
-
-    static readonly string _tripFilePath = "trips.dat";
-
-    static void SaveTrips()
-    {
-        SaveData data = new() { Budget = _budget.Amount, Trips = _trips };
-        FileSaver.Save(_tripFilePath, data);
-    }
-
-    static void LoadTrips()
-    {
-        SaveData data = FileSaver.Load(_tripFilePath);
-
-        if (data != null)
-        {
-            _budget.Amount = data.Budget;
-            
-            _trips.Clear();
-            _trips.AddRange(data.Trips);
-        }
-    }
-
-    static string DisplayChoices(string title, IEnumerable<string> choices, int pageSize = 10, string moreChoicesText = "Move up and down to reveal more")
-    {
-        var choice = AnsiConsole.Prompt(
-            new SelectionPrompt<string>()
-                .Title(title)
-                .PageSize(pageSize)
-                .MoreChoicesText($"[grey]({moreChoicesText})[/]")
-                .AddChoices(choices));
-
-        return choice;
-    }
-
-    static List<string>? DisplayMultiSelectChoices(string title, IEnumerable<string> choices, int pageSize = 10, string moreChoicesText = "Move up and down to reveal more")
-    {
-        var selected = AnsiConsole.Prompt(
-                new MultiSelectionPrompt<string>()
-                    .Title(title)
-                    .PageSize(pageSize)
-                    .MoreChoicesText($"[grey]{moreChoicesText}[/]")
-                    .InstructionsText(
-                        "[grey](Press [blue]<space>[/] to toggle a choice, " + 
-                        "[green]<enter>[/] to accept)[/]")
-                    .AddChoices(choices));
-
-        return selected;
-    }
+    private readonly static TripManager _tripManager = new(); 
 
     static void EnterBudget()
     {
-        if (_budget.Amount > 0M)
-            AnsiConsole.WriteLine($"Budget: ${_budget.Amount}");
+        var budget = _tripManager.Budget;
 
-        var amount = AnsiConsole.Prompt(new TextPrompt<decimal>("Enter new budget: "));
+        if (budget > 0M)
+            IOManager.DisplayMessage($"Budget: ${budget}");
 
-        if (amount > 0M && _budget.Amount != amount)
-        {
-            _budget.Amount = amount;
-        }
+        var amount = IOManager.AskQuestion("Enter new budget: ", budget);
+        _tripManager.Budget = budget;
     }
 
     static void AddTrip()
     {
-        if (_budget.Amount == 0M)
+        if (_tripManager.Budget == 0M)
         {
-            AnsiConsole.WriteLine("[red]Create a budget[/]");
+            IOManager.DisplayMessage("[red]Create a budget[/]");
             return;
         }
 
@@ -86,35 +32,22 @@ class Program
         if (!string.IsNullOrEmpty(trip.Name))
         {
             PromptTripItemMenu(trip);
-            _trips.Add(trip);
-
-            SaveTrips();
+            _tripManager.AddTrip(trip);
+            _tripManager.SaveTrips();
         }
-    }
-
-    static decimal CalculateTripCost(Trip trip)
-    {
-        decimal cost = 0M;
-
-        if (trip.Items.Count > 0)
-        {
-            foreach (var item in trip.Items)
-                cost += item.Cost;
-        }
-
-        return cost;
     }
 
     static void DisplayTrip(Trip trip, bool showTripItems = false)
     {
         var table = new Table();
-        var cost = CalculateTripCost(trip);
+        var cost = TripManager.CalculateTripCost(trip);
         string costFormat = $"$[green]{cost}[/]";
+        var budget = _tripManager.Budget;
 
-        if (cost > _budget.Amount)
+        if (cost > budget)
             costFormat = $"$[red]{cost}[/]";
 
-        if (Math.Abs(_budget.Amount - cost) <= 200M)
+        if (Math.Abs(budget - cost) <= 200M)
             costFormat = $"$[yellow]{cost}[/]";
 
         if(showTripItems && trip.Items.Count > 0)
@@ -166,10 +99,10 @@ class Program
 
     static void PromptTripInfo(Trip trip)
     {
-        trip.Name = AnsiConsole.Prompt(new TextPrompt<string>("Name:").DefaultValue(trip.Name));
-        trip.Destination = AnsiConsole.Prompt(new TextPrompt<string>("Location:").DefaultValue(trip.Destination));
-        trip.StartDate = AnsiConsole.Prompt(new TextPrompt<DateTime>("Start Date [red]MM-DD-YYYY[/]:").DefaultValue(trip.StartDate));
-        trip.EndDate = AnsiConsole.Prompt(new TextPrompt<DateTime>("End Date [red]MM-DD-YYYY[/]:").DefaultValue(trip.EndDate));
+        trip.Name = IOManager.AskQuestion("Name:", trip.Name);
+        trip.Destination = IOManager.AskQuestion("Location:", trip.Destination);
+        trip.StartDate = IOManager.AskQuestion("Start Date [red]MM-DD-YYYY[/]:", trip.StartDate);
+        trip.EndDate = IOManager.AskQuestion("End Date [red]MM-DD-YYYY[/]:", trip.EndDate);
 
         DisplayTrip(trip);
     }
@@ -182,7 +115,7 @@ class Program
         if (!string.IsNullOrEmpty(item.Name))
         {
             trip.Items.Add(item);
-            SaveTrips();
+            _tripManager.SaveTrips();
         }
     }
 
@@ -190,22 +123,29 @@ class Program
     {
         if (trip.Items.Count > 0)
         {
-            var itemName = DisplayChoices("Select trip item to edit:", trip.Items.Select(i => i.Name));
+            var tripItemList = trip.Items.Select(i => i.Name).ToList();
+            tripItemList.Add("Cancel");
+
+            var itemName = IOManager.DisplayChoices("Select trip item to edit:", tripItemList);
+
+            if (string.Compare(itemName, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
+                return;
+            
             var item = trip.Items.FirstOrDefault(i => string.Compare(i.Name, itemName, StringComparison.OrdinalIgnoreCase) == 0);
 
             if (item != null)
             {
                 PrompTripItemInfo(item);
-                SaveTrips();
+                _tripManager.SaveTrips();
             }
             else
             {
-                AnsiConsole.WriteLine("Trip item [red]does not[/] exist");
+                IOManager.DisplayMessage("Trip item [red]does not[/] exist");
             }
         }
         else
         {
-            AnsiConsole.WriteLine("This trip has [red]no items[/] to edit");
+            IOManager.DisplayMessage("This trip has [red]no items[/] to edit");
         }
     }
 
@@ -213,11 +153,15 @@ class Program
     {
         if (trip.Items.Count > 0)
         {
-            var names = DisplayMultiSelectChoices("Select trip item to edit:", trip.Items.Select(i => i.Name));            
+            var tripItemList = trip.Items.Select(i => i.Name).ToList();
+            tripItemList.Add("Cancel");
+
+            var names = IOManager.DisplayMultiSelectChoices("Select trip item to edit:", tripItemList);
 
             if (names != null && names.Count > 0)
             {
-
+                if (names.Any(n => string.Compare(n, "Cancel", StringComparison.OrdinalIgnoreCase) == 0))
+                    return;
 
                 foreach (var name in names)
                 {
@@ -226,18 +170,18 @@ class Program
                     if (item != null)
                     {
                         trip.Items.Remove(item);
-                        AnsiConsole.WriteLine($"Trip item {name} [green]removed[/]");
+                        IOManager.DisplayMessage($"Trip item {name} [green]removed[/]");
                     }
                 }
             }
             else
             {
-                AnsiConsole.WriteLine("Trip items [red]were not[/] deleted");
+                IOManager.DisplayMessage("Trip items [red]were not[/] deleted");
             }
         }
         else
         {
-            AnsiConsole.WriteLine("This trip has [red]no items[/] to remove");
+            IOManager.DisplayMessage("This trip has [red]no items[/] to remove");
         }
     }
 
@@ -255,7 +199,7 @@ class Program
         {
             Console.Clear();
             DisplayTrip(trip, true);
-            choice = DisplayChoices("Trip Menu", tripMenu.Select(t => t.Key));
+            choice = IOManager.DisplayChoices("Trip Menu", tripMenu.Select(t => t.Key));
 
             if (string.Compare(choice, "Done", StringComparison.OrdinalIgnoreCase) == 0)
                 break;
@@ -267,83 +211,160 @@ class Program
 
     static void PrompTripItemInfo(TripItem item)
     {
-        item.Name = AnsiConsole.Prompt(new TextPrompt<string>("Name:").DefaultValue(item.Name));
-        item.Destination = AnsiConsole.Prompt(new TextPrompt<string>("Location:").DefaultValue(item.Destination));
+        item.Name = IOManager.AskQuestion("Name:", item.Name);
+        item.Destination = IOManager.AskQuestion("Location:", item.Destination);
         
-        var type = DisplayChoices("Type:", Enum.GetNames(typeof(TripItemType)));
+        var type = IOManager.DisplayChoices("Type:", Enum.GetNames(typeof(TripItemType)));
 
         if (Enum.TryParse(type, out TripItemType itemType))
             item.ItemType = itemType;
         else
             item.ItemType = TripItemType.Excursion;
         
-        item.StartDate = AnsiConsole.Prompt(new TextPrompt<DateTime>("Start Date [red]MM-DD-YYYY[/]:").DefaultValue(item.StartDate));
-        item.Duration = AnsiConsole.Prompt(new TextPrompt<decimal>("Duration:").DefaultValue(item.Duration));
+        item.StartDate = IOManager.AskQuestion("Start Date [red]MM-DD-YYYY[/]:", item.StartDate);
+        item.Duration = IOManager.AskQuestion("Duration:", item.Duration);
         
-        var durType = DisplayChoices("Duration Type:", Enum.GetNames(typeof(TripItemDurationType)));
+        var durType = IOManager.DisplayChoices("Duration Type:", Enum.GetNames(typeof(TripItemDurationType)));
 
         if (Enum.TryParse(durType, out TripItemDurationType durationType))
             item.DurationType = durationType;
         else
             item.DurationType = TripItemDurationType.Minutes;
         
-        item.Cost = AnsiConsole.Prompt(new TextPrompt<decimal>("Cost:").DefaultValue(item.Cost));
+        item.Cost = IOManager.AskQuestion("Cost:", item.Cost);
         DisplayTripItems(item);
     }
 
-    static void EditTrip()
+    static void AnalyzeTrip()
     {
-        if (_budget.Amount == 0M)
+        if (_tripManager.Budget == 0M)
         {
             AnsiConsole.WriteLine("[red]Create a budget[/]");
             return;
         }
 
-        if (_trips.Count > 0)
+        if (_tripManager.Trips.Count > 0)
         {
-            var tripName = DisplayChoices("Select Trip", _trips.Select(t => t.Name));
-            var trip = _trips.FirstOrDefault(t => string.Compare(t.Name, tripName, StringComparison.OrdinalIgnoreCase) == 0);
+            var tripList = _tripManager.Trips.Select(t => t.Name).ToList();
+            tripList.Add("Cancel");
+
+            var tripName = IOManager.DisplayChoices("Select Trip", tripList);
+
+            if (string.Compare(tripName, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
+                return;
+
+            var trip = _tripManager.GetTrip(tripName); 
+
+            if (trip != null)
+            {
+                AnalyzeTrip(trip);
+            }
+            else
+            {
+                IOManager.DisplayMessage("Trip [red]does not[/] exist");
+            }
+        }
+        else
+        {
+            IOManager.DisplayMessage("You have [red]no trips[/] to analyze");
+        }
+    }
+
+    static void AnalyzeTrip(Trip trip)
+    {
+        var data = TripAnalyzer.AnalyzeTrip(trip, _tripManager.Budget);
+
+        AnsiConsole.Clear();
+        AnsiConsole.Write(new Rows(new Text(data.Name).Centered()));
+
+        string costFormat = $"$[green]{data.TotalCost}[/]";
+        var budget = _tripManager.Budget;
+
+        if (data.TotalCost > budget)
+            costFormat = $"$[red]{data.TotalCost}[/]";
+
+        if (Math.Abs(budget - data.TotalCost) <= 200M)
+            costFormat = $"$[yellow]{data.TotalCost}[/]";
+
+        costFormat = $"using {Math.Round(data.Percentage, 2)}% of {costFormat}";
+        AnsiConsole.Write(new Rows(new Markup(costFormat).Centered()));
+
+        var chart = new BarChart()
+                        .Width(60)
+                        .Label("[green bold underline]Itenerary[/]")
+                        .CenterLabel();
+
+        foreach (var item in data.Items)
+        {
+            Color color = item.BudgetPercentage > 70M ? Color.Red : item.BudgetPercentage > 50M ? Color.Yellow : Color.Green;
+            chart.AddItem(item.Name, (double)Math.Round(item.BudgetPercentage, 2), color);
+        }
+
+        AnsiConsole.Write(chart);
+        string choice = IOManager.DisplayChoices(string.Empty, ["Close"]);
+    }
+
+    static void EditTrip()
+    {
+        if (_tripManager.Budget == 0M)
+        {
+            AnsiConsole.WriteLine("[red]Create a budget[/]");
+            return;
+        }
+
+        if (_tripManager.Trips.Count > 0)
+        {
+            var tripList = _tripManager.Trips.Select(t => t.Name).ToList();
+            tripList.Add("Cancel");
+
+            var tripName = IOManager.DisplayChoices("Select Trip", tripList);
+
+            if (string.Compare(tripName, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
+                return;
+
+            var trip = _tripManager.GetTrip(tripName); 
 
             if (trip != null)
             {
                 PromptTripInfo(trip);
                 PromptTripItemMenu(trip);
 
-                SaveTrips();
+                _tripManager.SaveTrips();
             }
             else
             {
-                AnsiConsole.WriteLine("Trip [red]does not[/] exist");
+                IOManager.DisplayMessage("Trip [red]does not[/] exist");
             }
         }
         else
         {
-            AnsiConsole.WriteLine("You have [red]no trips[/] to edit");
+            IOManager.DisplayMessage("You have [red]no trips[/] to edit");
         }
     }
 
     static void Main(string[] args)
     {
-        LoadTrips();
+        _tripManager.LoadTrips();
         string choice = string.Empty;
         
         Dictionary<string, Action> mainMenu = new() {
             {"Allocate Budget", () => EnterBudget()},
             {"Add Trip", () => AddTrip()},
             {"Edit Trips", () => EditTrip()}, 
+            {"Analyze Trips", () => AnalyzeTrip()},
             {"Quit", () => {}}         
         };
 
         while (true)
         {
-            var budget = $"Budget: $[green]{_budget.Amount}[/]";
+            var budget = $"Budget: $[green]{_tripManager.Budget}[/]";
 
             AnsiConsole.Clear();
-            AnsiConsole.WriteLine("TripPlanner v1.0\n");
+            AnsiConsole.WriteLine("TripPlanner v1.1\n");
             AnsiConsole.Write(new Markup(budget));
             AnsiConsole.WriteLine();
             
-            choice = DisplayChoices("Main Menu", mainMenu.Select(m => m.Key));
+            choice = IOManager.DisplayChoices("Main Menu", mainMenu.Select(m => m.Key));
 
             if (string.Compare(choice, "Quit", StringComparison.OrdinalIgnoreCase) == 0)
                 break;
