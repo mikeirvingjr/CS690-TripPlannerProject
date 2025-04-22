@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Spectre.Console;
 
 namespace TripPlanner;
@@ -17,16 +18,35 @@ public static class IOManager
         AnsiConsole.Write(message);
     }
 
-    public static string DisplayChoices(string title, IEnumerable<string> choices, int pageSize = 10, string moreChoicesText = "Move up and down to reveal more")
+    public static string DisplayChoices<T>(string title, IEnumerable<string> choices, T defaultValue, int pageSize = 10, string moreChoicesText = "Move up and down to reveal more")
     {
-        var choice = AnsiConsole.Prompt(
-            new SelectionPrompt<string>()
+        var prompt = new SelectionPrompt<string>()
                 .Title(title)
                 .PageSize(pageSize)
                 .MoreChoicesText($"[grey]({moreChoicesText})[/]")
-                .AddChoices(choices));
+                .AddChoices(choices);
 
-        return choice;
+        if (!EqualityComparer<T>.Default.Equals(defaultValue, default(T)) && !string.IsNullOrEmpty(defaultValue?.ToString()))
+        {   
+            List<string> orderedChoices = [.. choices];
+
+            orderedChoices.Remove(defaultValue.ToString() ?? string.Empty);
+            orderedChoices.Insert(0, defaultValue.ToString() ?? string.Empty);
+
+            return AnsiConsole.Prompt(new SelectionPrompt<string>()
+                .Title(title)
+                .PageSize(pageSize)
+                .MoreChoicesText($"[grey]({moreChoicesText})[/]")
+                .AddChoices(orderedChoices)
+            );
+        }
+
+        return AnsiConsole.Prompt(new SelectionPrompt<string>()
+                .Title(title)
+                .PageSize(pageSize)
+                .MoreChoicesText($"[grey]({moreChoicesText})[/]")
+                .AddChoices(choices)
+        );
     }
 
     public static List<string>? DisplayMultiSelectChoices(string title, IEnumerable<string> choices, int pageSize = 10, string moreChoicesText = "Move up and down to reveal more")
@@ -42,5 +62,10 @@ public static class IOManager
                     .AddChoices(choices));
 
         return selected;
+    }
+
+    public static void WaitForInput(string message)
+    {
+        string choice = IOManager.DisplayChoices(string.Empty, [message], string.Empty);
     }
 }

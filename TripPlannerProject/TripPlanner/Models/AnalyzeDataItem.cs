@@ -6,5 +6,7 @@ public class AnalyzeDataItem
 
     public decimal Cost { get; set; }
 
+    public string ItemType { get; set; } = string.Empty;
+
     public decimal BudgetPercentage { get; set; }
 }
