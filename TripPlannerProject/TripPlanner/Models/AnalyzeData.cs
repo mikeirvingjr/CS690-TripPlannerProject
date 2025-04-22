@@ -13,4 +13,6 @@ public class AnalyzeData
     public decimal Percentage { get; set; }
 
     public List<AnalyzeDataItem> Items { get; } = [];
+
+    public List<AnalyzeDataItem> ItemTypes { get; } = [];
 }

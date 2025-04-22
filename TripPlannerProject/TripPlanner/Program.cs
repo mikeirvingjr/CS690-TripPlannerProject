@@ -9,13 +9,8 @@ class Program
 
     static void EnterBudget()
     {
-        var budget = _tripManager.Budget;
-
-        if (budget > 0M)
-            IOManager.DisplayMessage($"Budget: ${budget}");
-
-        var amount = IOManager.AskQuestion("Enter new budget: ", budget);
-        _tripManager.Budget = budget;
+        var amount = IOManager.AskQuestion("Enter new budget: ", _tripManager.Budget);
+        _tripManager.Budget = amount;
     }
 
     static void AddTrip()
@@ -23,10 +18,19 @@ class Program
         if (_tripManager.Budget == 0M)
         {
             IOManager.DisplayMessage("[red]Create a budget[/]");
+            IOManager.WaitForInput("Return");
+
             return;
         }
+        
+        var choice = IOManager.DisplayChoices("Add Trip:", ["New", "Copy From Existing", "Cancel"], string.Empty);
 
-        Trip trip = new();
+        if (string.Compare(choice, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
+            return;
+
+        bool createNew = string.Compare(choice, "New", StringComparison.OrdinalIgnoreCase) == 0;
+
+        Trip trip = createNew ? new() : CopyTrip();
         PromptTripInfo(trip);
 
         if (!string.IsNullOrEmpty(trip.Name))
@@ -37,6 +41,48 @@ class Program
         }
     }
 
+    static Trip CopyTrip()
+    {
+        Trip trip = new();
+
+        if (_tripManager.Trips.Count > 0)
+        {
+            var tripList = _tripManager.Trips.Select(t => t.Name).ToList();
+            tripList.Add("Cancel");
+
+            var tripName = IOManager.DisplayChoices("Select Trip to Copy", tripList, string.Empty);
+
+            if (string.Compare(tripName, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
+                return trip;
+
+            var existingTrip = _tripManager.GetTrip(tripName); 
+
+            if (existingTrip != null)
+            {
+                DisplayTrip(existingTrip);
+
+                bool copyDetails = string.Compare("y", IOManager.AskQuestion<string>("Copy trip details?: (y/n): ", "y"), StringComparison.OrdinalIgnoreCase) == 0;
+
+                var tripItemList = existingTrip.Items.Select(i => i.Name).ToList();
+                tripItemList.Add("Cancel");
+
+                var names = IOManager.DisplayMultiSelectChoices("Copy trip item(s):", tripItemList);
+                string[] itemNames = [];
+
+                if (names != null && names.Count > 0)
+                {
+                    itemNames = names.Any(n => string.Compare(n, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
+                        ? []
+                        : [.. names];
+                }
+
+                return _tripManager.CopyTrip(existingTrip, copyDetails, itemNames);
+            }            
+        }
+        
+        return trip;
+    }
+
     static void DisplayTrip(Trip trip, bool showTripItems = false)
     {
         var table = new Table();
@@ -45,10 +91,14 @@ class Program
         var budget = _tripManager.Budget;
 
         if (cost > budget)
+        {
             costFormat = $"$[red]{cost}[/]";
+        }
 
         if (Math.Abs(budget - cost) <= 200M)
+        {
             costFormat = $"$[yellow]{cost}[/]";
+        }
 
         if(showTripItems && trip.Items.Count > 0)
         {
@@ -91,7 +141,12 @@ class Program
             table.AddColumn($"${items[0].Cost}");
 
             foreach (var item in items.Skip(1))
-                table.AddRow(item.Name, item.Destination, item.ItemType.ToString(), item.StartDate.ToShortDateString(), $"{item.Duration} {item.DurationType.ToString().ToLowerInvariant()}", $"${item.Cost}");
+            {
+                table.AddRow(item.Name, item.Destination, item.ItemType.ToString(), 
+                             item.StartDate.ToShortDateString(), 
+                             $"{item.Duration} {item.DurationType.ToString().ToLowerInvariant()}",
+                             $"${item.Cost}");
+            }
         }
 
         return table;
@@ -126,7 +181,7 @@ class Program
             var tripItemList = trip.Items.Select(i => i.Name).ToList();
             tripItemList.Add("Cancel");
 
-            var itemName = IOManager.DisplayChoices("Select trip item to edit:", tripItemList);
+            var itemName = IOManager.DisplayChoices("Select trip item to edit:", tripItemList, string.Empty);
 
             if (string.Compare(itemName, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
                 return;
@@ -141,11 +196,13 @@ class Program
             else
             {
                 IOManager.DisplayMessage("Trip item [red]does not[/] exist");
+                IOManager.WaitForInput("Return");
             }
         }
         else
         {
             IOManager.DisplayMessage("This trip has [red]no items[/] to edit");
+            IOManager.WaitForInput("Return");
         }
     }
 
@@ -177,11 +234,13 @@ class Program
             else
             {
                 IOManager.DisplayMessage("Trip items [red]were not[/] deleted");
+                IOManager.WaitForInput("Return");
             }
         }
         else
         {
             IOManager.DisplayMessage("This trip has [red]no items[/] to remove");
+            IOManager.WaitForInput("Return");
         }
     }
 
@@ -189,9 +248,11 @@ class Program
     {
         string choice = string.Empty;
         Dictionary<string, Action> tripMenu = new() {
+            {"Edit Details", () => PromptTripInfo(trip)},
             {"Add Item", () => AddItem(trip)},
             {"Edit Items", () => EditItem(trip)},
             {"Remove Items", () => RemoveItems(trip)},
+            {"Analyze Trip", () => AnalyzeTrip(trip)},
             {"Done", () => {}}         
         };
 
@@ -199,7 +260,7 @@ class Program
         {
             Console.Clear();
             DisplayTrip(trip, true);
-            choice = IOManager.DisplayChoices("Trip Menu", tripMenu.Select(t => t.Key));
+            choice = IOManager.DisplayChoices("Trip Menu", tripMenu.Select(t => t.Key), string.Empty);
 
             if (string.Compare(choice, "Done", StringComparison.OrdinalIgnoreCase) == 0)
                 break;
@@ -214,22 +275,30 @@ class Program
         item.Name = IOManager.AskQuestion("Name:", item.Name);
         item.Destination = IOManager.AskQuestion("Location:", item.Destination);
         
-        var type = IOManager.DisplayChoices("Type:", Enum.GetNames(typeof(TripItemType)));
+        var type = IOManager.DisplayChoices("Type:", Enum.GetNames(typeof(TripItemType)), item.ItemType);
 
         if (Enum.TryParse(type, out TripItemType itemType))
+        {
             item.ItemType = itemType;
+        }
         else
+        {
             item.ItemType = TripItemType.Excursion;
+        }
         
         item.StartDate = IOManager.AskQuestion("Start Date [red]MM-DD-YYYY[/]:", item.StartDate);
         item.Duration = IOManager.AskQuestion("Duration:", item.Duration);
         
-        var durType = IOManager.DisplayChoices("Duration Type:", Enum.GetNames(typeof(TripItemDurationType)));
+        var durType = IOManager.DisplayChoices("Duration Type:", Enum.GetNames(typeof(TripItemDurationType)), item.DurationType);
 
         if (Enum.TryParse(durType, out TripItemDurationType durationType))
+        {
             item.DurationType = durationType;
+        }
         else
+        {
             item.DurationType = TripItemDurationType.Minutes;
+        }
         
         item.Cost = IOManager.AskQuestion("Cost:", item.Cost);
         DisplayTripItems(item);
@@ -240,6 +309,8 @@ class Program
         if (_tripManager.Budget == 0M)
         {
             AnsiConsole.WriteLine("[red]Create a budget[/]");
+            IOManager.WaitForInput("Return");
+
             return;
         }
 
@@ -248,7 +319,7 @@ class Program
             var tripList = _tripManager.Trips.Select(t => t.Name).ToList();
             tripList.Add("Cancel");
 
-            var tripName = IOManager.DisplayChoices("Select Trip", tripList);
+            var tripName = IOManager.DisplayChoices("Select Trip", tripList, string.Empty);
 
             if (string.Compare(tripName, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
                 return;
@@ -262,11 +333,13 @@ class Program
             else
             {
                 IOManager.DisplayMessage("Trip [red]does not[/] exist");
+                IOManager.WaitForInput("Return");
             }
         }
         else
         {
             IOManager.DisplayMessage("You have [red]no trips[/] to analyze");
+            IOManager.WaitForInput("Return");
         }
     }
 
@@ -274,34 +347,69 @@ class Program
     {
         var data = TripAnalyzer.AnalyzeTrip(trip, _tripManager.Budget);
 
-        AnsiConsole.Clear();
-        AnsiConsole.Write(new Rows(new Text(data.Name).Centered()));
+        DisplayAnalysis(data);
+    }
 
-        string costFormat = $"$[green]{data.TotalCost}[/]";
-        var budget = _tripManager.Budget;
-
-        if (data.TotalCost > budget)
-            costFormat = $"$[red]{data.TotalCost}[/]";
-
-        if (Math.Abs(budget - data.TotalCost) <= 200M)
-            costFormat = $"$[yellow]{data.TotalCost}[/]";
-
-        costFormat = $"using {Math.Round(data.Percentage, 2)}% of {costFormat}";
-        AnsiConsole.Write(new Rows(new Markup(costFormat).Centered()));
-
-        var chart = new BarChart()
-                        .Width(60)
-                        .Label("[green bold underline]Itenerary[/]")
-                        .CenterLabel();
-
-        foreach (var item in data.Items)
+    static void DisplayAnalysis(AnalyzeData? data, string screenPrompt = "Close")
+    {
+        if (data != null)
         {
-            Color color = item.BudgetPercentage > 70M ? Color.Red : item.BudgetPercentage > 50M ? Color.Yellow : Color.Green;
-            chart.AddItem(item.Name, (double)Math.Round(item.BudgetPercentage, 2), color);
-        }
+            AnsiConsole.Clear();
+            AnsiConsole.Write(new Rows(new Text(data.Name).Centered()));
 
-        AnsiConsole.Write(chart);
-        string choice = IOManager.DisplayChoices(string.Empty, ["Close"]);
+            string costFormat = $"$[green]{data.Budget}[/]";
+
+            if (data.TotalCost > data.Budget)
+            {
+                costFormat = $"$[red]{data.Budget}[/]";
+            }
+
+            if (Math.Abs(data.Budget - data.TotalCost) <= 200M)
+            {
+                costFormat = $"$[yellow]{data.Budget}[/]";
+            }
+
+            costFormat = $"using {Math.Round(data.Percentage, 2)}% of {costFormat}";
+            AnsiConsole.Write(new Rows(new Markup(costFormat).Centered()));
+
+            Dictionary<string, Color> colors = [];
+
+            foreach (var itemType in Enum.GetNames<TripItemType>())
+            {
+                (byte r, byte g, byte b) = ColorManager.GenerateRandomColor();
+                Color color = new(r, g, b);
+                colors.Add(itemType, color);
+            }
+
+            if (data.Items.Count != 0)
+            {
+                var chart = new BarChart()
+                            .Label("[green bold underline]Itenerary[/]")
+                            .CenterLabel();
+
+                foreach (var item in data.Items)
+                {
+                    chart.AddItem(item.Name, (double)Math.Round(item.BudgetPercentage, 2), colors[item.ItemType]);
+                }
+        
+                AnsiConsole.Write(chart);
+                AnsiConsole.WriteLine();
+            }
+
+            if (data.ItemTypes.Count != 0)
+            {
+                var breakdownChart = new BreakdownChart().FullSize();
+
+                foreach (var item in data.ItemTypes)
+                {
+                    breakdownChart.AddItem(item.Name, (double)item.Cost, colors[item.Name]);
+                }
+        
+                AnsiConsole.Write(breakdownChart);
+            }
+
+            IOManager.WaitForInput(screenPrompt);
+        }
     }
 
     static void EditTrip()
@@ -309,6 +417,8 @@ class Program
         if (_tripManager.Budget == 0M)
         {
             AnsiConsole.WriteLine("[red]Create a budget[/]");
+            IOManager.WaitForInput("Return");
+
             return;
         }
 
@@ -317,7 +427,47 @@ class Program
             var tripList = _tripManager.Trips.Select(t => t.Name).ToList();
             tripList.Add("Cancel");
 
-            var tripName = IOManager.DisplayChoices("Select Trip", tripList);
+            var tripName = IOManager.DisplayChoices("Select Trip", tripList, string.Empty);
+
+            if (string.Compare(tripName, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
+                return;
+
+            var trip = _tripManager.GetTrip(tripName); 
+
+            if (trip != null)
+            {                
+                PromptTripItemMenu(trip);
+                _tripManager.SaveTrips();
+            }
+            else
+            {
+                IOManager.DisplayMessage("Trip [red]does not[/] exist");
+                IOManager.WaitForInput("Return");
+            }
+        }
+        else
+        {
+            IOManager.DisplayMessage("You have [red]no trips[/] to edit");
+            IOManager.WaitForInput("Return");
+        }
+    }
+
+    static void RemoveTrip()
+    {
+        if (_tripManager.Budget == 0M)
+        {
+            AnsiConsole.WriteLine("[red]Create a budget[/]");
+            IOManager.WaitForInput("Return");
+
+            return;
+        }
+
+        if (_tripManager.Trips.Count > 0)
+        {
+            var tripList = _tripManager.Trips.Select(t => t.Name).ToList();
+            tripList.Add("Cancel");
+
+            var tripName = IOManager.DisplayChoices("Select Trip to Remove", tripList, string.Empty);
 
             if (string.Compare(tripName, "Cancel", StringComparison.OrdinalIgnoreCase) == 0)
                 return;
@@ -326,19 +476,111 @@ class Program
 
             if (trip != null)
             {
-                PromptTripInfo(trip);
-                PromptTripItemMenu(trip);
-
+                _tripManager.RemoveTrip(trip);                
                 _tripManager.SaveTrips();
             }
             else
             {
                 IOManager.DisplayMessage("Trip [red]does not[/] exist");
+                IOManager.WaitForInput("Return");
             }
         }
         else
         {
             IOManager.DisplayMessage("You have [red]no trips[/] to edit");
+            IOManager.WaitForInput("Return");
+        }
+    }
+
+    static void CompareTrip()
+    {
+        if (_tripManager.Budget == 0M)
+        {
+            AnsiConsole.WriteLine("[red]Create a budget[/]");
+            IOManager.WaitForInput("Return");
+
+            return;
+        }
+
+        if (_tripManager.Trips.Count > 0)
+        {
+            var tripList = _tripManager.Trips.Select(t => t.Name).ToList();
+            tripList.Add("Cancel");
+
+            var names = IOManager.DisplayMultiSelectChoices("Select Trips to Compare", tripList);
+
+            if (names != null && names.Count > 0)
+            {
+                List<Trip> trips = [];
+
+                if (names.Any(n => string.Compare(n, "Cancel", StringComparison.OrdinalIgnoreCase) == 0))
+                    return;
+
+                foreach (var name in names)
+                {
+                    var trip = _tripManager.GetTrip(name);
+
+                    if (trip != null)
+                    {
+                        trips.Add(trip);
+                    }
+                }
+
+                TripComparer comparer = new(trips, _tripManager.Budget);
+                comparer.Compare();
+
+                DisplayComparisonResults(comparer);
+            }
+        }
+        else
+        {
+            IOManager.DisplayMessage("You have [red]no trips[/] to edit");
+            IOManager.WaitForInput("Return");
+        }
+    }
+
+    static void DisplayComparisonResults(TripComparer comparer)
+    {
+        if (comparer.AnalyzerData.Count != 0)
+        {
+            foreach (var datem in comparer.AnalyzerData)
+            {
+                DisplayAnalysis(datem.Value, "Next");
+            }
+
+            AnsiConsole.Clear();
+
+            var table = new Table();
+            table.AddColumn(new TableColumn(string.Empty));
+
+            foreach (var tripName in comparer.AnalyzerData.Keys)
+            {
+                table.AddColumn(new TableColumn(new Text(tripName).Centered()));
+            }
+
+            foreach (var key in comparer.ItemLengths.Keys)
+            {
+                List<string> columns = [key];
+
+                foreach (var item in comparer.ItemLengths[key])
+                {
+                    if (item.IsSelected)
+                    {
+                        columns.Add($"[green]{item.Value}[/]");
+                    }
+                    else
+                    {
+                        columns.Add(item.Value.ToString());
+                    }
+                }
+
+                table.AddRow(columns.ToArray());
+            }
+
+            AnsiConsole.Write(table);
+
+            AnsiConsole.WriteLine($"\nBest Trip: {comparer.BestTrip}");
+            IOManager.WaitForInput("Close");
         }
     }
 
@@ -351,7 +593,9 @@ class Program
             {"Allocate Budget", () => EnterBudget()},
             {"Add Trip", () => AddTrip()},
             {"Edit Trips", () => EditTrip()}, 
+            {"Remove Trips", () => RemoveTrip()},
             {"Analyze Trips", () => AnalyzeTrip()},
+            {"Compare Trips", () => CompareTrip()},
             {"Quit", () => {}}         
         };
 
@@ -360,11 +604,11 @@ class Program
             var budget = $"Budget: $[green]{_tripManager.Budget}[/]";
 
             AnsiConsole.Clear();
-            AnsiConsole.WriteLine("TripPlanner v1.1\n");
+            AnsiConsole.WriteLine("TripPlanner v1.2\n");
             AnsiConsole.Write(new Markup(budget));
             AnsiConsole.WriteLine();
             
-            choice = IOManager.DisplayChoices("Main Menu", mainMenu.Select(m => m.Key));
+            choice = IOManager.DisplayChoices("Main Menu", mainMenu.Select(m => m.Key), string.Empty);
 
             if (string.Compare(choice, "Quit", StringComparison.OrdinalIgnoreCase) == 0)
                 break;

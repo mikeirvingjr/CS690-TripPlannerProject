@@ -54,7 +54,20 @@ public class TripAnalyzer
             {
                 Name = item.Name,
                 Cost = item.Cost,
-                BudgetPercentage = item.Cost / budget * 100M
+                ItemType = Enum.GetName<TripItemType>(item.ItemType) ?? string.Empty,
+                BudgetPercentage = budget > 0 ? item.Cost / budget * 100M : 100M
+            });
+        }
+
+        foreach (var value in Enum.GetValues<TripItemType>())
+        {
+            var items = trip.Items.Where(i => i.ItemType == value);
+
+            datem.ItemTypes.Add(new AnalyzeDataItem
+            {
+                Name = Enum.GetName<TripItemType>(value) ?? value.ToString(),
+                Cost = items.Count(),
+                BudgetPercentage = trip.Items.Count > 0 ? items.Count() / trip.Items.Count * 100M : 0M
             });
         }
 
