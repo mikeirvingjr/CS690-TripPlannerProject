@@ -29,6 +29,7 @@ public class TripComparer(IEnumerable<Trip> trips, decimal budget)
 
             foreach (var trip in _trips)
             {
+                names.Clear();
                 ComparerDataItem<decimal>? newItemData = null;
                 AnalyzerData[trip.Name] = TripAnalyzer.AnalyzeTrip(trip, _budget);
 
@@ -115,12 +116,11 @@ public class TripComparer(IEnumerable<Trip> trips, decimal budget)
                 }
             }
 
-            Dictionary<string, int> counts = [];
+            Dictionary<string, int> counts = _trips.Select(t => t.Name).Distinct().ToDictionary(key => key, value => 0);
 
             foreach (var key in ItemLengths.Keys)
             {
-                var minOrMax = string.Compare(key, "Total Cost", StringComparison.OrdinalIgnoreCase) == 0 ||
-                          string.Compare(key, "Budget Percentage (%)", StringComparison.OrdinalIgnoreCase) == 0  
+                var minOrMax = string.Compare(key, "Total Cost", StringComparison.OrdinalIgnoreCase) == 0 
                   ? ItemLengths[key].Min(c => c.Value) : ItemLengths[key].Max(c => c.Value);
                 
                 var selectedItems = ItemLengths[key].Where(c => c.Value == minOrMax);
@@ -140,7 +140,10 @@ public class TripComparer(IEnumerable<Trip> trips, decimal budget)
                 }
             }
             
-            BestTrip = counts.MaxBy(entry => entry.Value).Key;
+
+            var maxItem = counts.Max(entry => entry.Value);
+            var maxItems = counts.Where(entry => entry.Value == maxItem);
+            BestTrip = maxItems.Count() == 1 ? maxItems.First().Key : "Inconclusive";
         }
     }
 }
