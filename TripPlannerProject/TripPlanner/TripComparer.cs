@@ -10,19 +10,11 @@ public class TripComparer(IEnumerable<Trip> trips, decimal budget)
 {
     private decimal _budget = budget;
 
-    private IEnumerable<Trip> _trips = trips;
+    private readonly IEnumerable<Trip> _trips = trips;
 
     public Dictionary<string, AnalyzeData> AnalyzerData { get; } = [];
 
     public Dictionary<string, List<ComparerDataItem<decimal>>> ItemLengths { get; } = [];
-
-    // public List<ComparerDataItem<TimeSpan>> TripLength { get; } = [];
-
-    // public List<ComparerDataItem<int>> IteneraryCount { get; } = [];
-
-    // public List<ComparerDataItem<decimal>> BudgetPercentage { get; } = [];
-
-    // public List<ComparerDataItem<decimal>> TotalCost {get; } = []; 
 
     public string BestTrip { get; set; } = string.Empty;
 
@@ -43,19 +35,34 @@ public class TripComparer(IEnumerable<Trip> trips, decimal budget)
                 foreach (var itemType in Enum.GetValues<TripItemType>())
                 {
                     var items = trip.Items.Where(i => i.ItemType == itemType);
-                    var duration = items.Sum(i => i.SumTime());
+                    var duration = items.Select(i => i.StartDate).Distinct().Count();
+                    var count = items.Count();
                     var itemTypeName = Enum.GetName<TripItemType>(itemType) ?? string.Empty;
-                    names.Add(itemTypeName);
-                    newItemData = new() { TripName = trip.Name, Value = duration };
+                    
+                    names.Add($"{itemTypeName} count");
+                    newItemData = new() { TripName = trip.Name, Value = count };
 
-                    if (ItemLengths.TryGetValue(itemTypeName, out List<ComparerDataItem<decimal>>? values))
+                    if (ItemLengths.TryGetValue(names.Last(), out List<ComparerDataItem<decimal>>? values))
                     {
                         values.Add(newItemData);
-                        ItemLengths[itemTypeName] = values;
+                        ItemLengths[names.Last()] = values;
                     }
                     else
                     {
-                        ItemLengths[itemTypeName] = [newItemData];
+                        ItemLengths[names.Last()] = [newItemData];
+                    }
+
+                    names.Add($"{itemTypeName} duration (in Days)");
+                    newItemData = new() { TripName = trip.Name, Value = (decimal)duration };
+
+                    if (ItemLengths.TryGetValue(names.Last(), out List<ComparerDataItem<decimal>>? valuesN))
+                    {
+                        valuesN.Add(newItemData);
+                        ItemLengths[names.Last()] = valuesN;
+                    }
+                    else
+                    {
+                        ItemLengths[names.Last()] = [newItemData];
                     }
                 }
 
@@ -112,19 +119,23 @@ public class TripComparer(IEnumerable<Trip> trips, decimal budget)
 
             foreach (var key in ItemLengths.Keys)
             {
-                var max = ItemLengths[key].Max(c => c.Value);
-                var maxItem = ItemLengths[key].FirstOrDefault(c => c.Value == max);
-                if (maxItem != null)
+                var minOrMax = string.Compare(key, "Total Cost", StringComparison.OrdinalIgnoreCase) == 0 ||
+                          string.Compare(key, "Budget Percentage (%)", StringComparison.OrdinalIgnoreCase) == 0  
+                  ? ItemLengths[key].Min(c => c.Value) : ItemLengths[key].Max(c => c.Value);
+                
+                var selectedItems = ItemLengths[key].Where(c => c.Value == minOrMax);
+                if (selectedItems != null && selectedItems.Count() == 1)
                 {
-                    maxItem.IsSelected = true;
+                    var selectedItem = selectedItems.First();                    
+                    selectedItem.IsSelected = true;
 
-                    if (counts.TryGetValue(maxItem.TripName, out int value))
+                    if (counts.TryGetValue(selectedItem.TripName, out int value))
                     {
-                        counts[maxItem.TripName] = ++value;
+                        counts[selectedItem.TripName] = ++value;
                     }
                     else
                     {
-                        counts[maxItem.TripName] = 1;
+                        counts[selectedItem.TripName] = 1;
                     }
                 }
             }

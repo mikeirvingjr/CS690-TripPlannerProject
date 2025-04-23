@@ -1,5 +1,6 @@
 ﻿using TripPlanner.Models;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace TripPlanner;
 
@@ -560,17 +561,17 @@ class Program
 
             foreach (var key in comparer.ItemLengths.Keys)
             {
-                List<string> columns = [key];
+                List<IRenderable> columns = [new Columns(new Text(key))];
 
                 foreach (var item in comparer.ItemLengths[key])
                 {
                     if (item.IsSelected)
                     {
-                        columns.Add($"[green]{item.Value}[/]");
+                        columns.Add(new Columns(new Markup($"[green]{item.Value}[/]").Centered()));
                     }
                     else
                     {
-                        columns.Add(item.Value.ToString());
+                        columns.Add(new Columns(new Text(item.Value.ToString()).Centered()));
                     }
                 }
 

@@ -54,6 +54,7 @@ public class TripComparerTests
 
         Assert.NotNull(comparer.AnalyzerData);
         Assert.NotEmpty(comparer.AnalyzerData);
-        Assert.Equal(3, comparer.AnalyzerData.Count);        
+        Assert.Equal(3, comparer.AnalyzerData.Count);
+        Assert.Equal("Test Trip 1", comparer.BestTrip);        
     }
 }
